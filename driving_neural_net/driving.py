@@ -2,9 +2,10 @@ import sys, random, math
 import pygame
 from pygame.locals import *
 from shapely.geometry import LineString
+import network as nnet
 
-height = 1000
-width = 800
+height = 1100
+width = 1100
 friction = .2
 
 def get_line(start, end):
@@ -147,7 +148,7 @@ class Sight:
 class Car:
     def __init__(self, size:(int,int), color:(int, int, int), \
                  acc_rate:float, brake_rate:float, turn_rate:float, \
-                 max_speed:float, track:Track):
+                 max_speed:float, track:Track, network:nnet.Network = None):
 
         self.image = pygame.Surface(size)
         self.image.fill(color)
@@ -162,17 +163,34 @@ class Car:
         self.pos = track.start_point
         self.color = color
         self.track = track
+        self.distance = 0
 
         self.los = [Sight(self.angle + 45, track, self.pos), \
                     Sight(self.angle, track, self.pos), \
                     Sight(self.angle - 45, track, self.pos)]
 
-    def move(self):
+        self.network = nnet.Network(4, 2, 8, 4)
+
+    def move(self, usr = False):
         self.collision()
+        if not usr:
+            self.network.process_input([self.los[0].length, self.los[1].length, self.los[2].length, self.speed*10])
+            self.network.propogate()
+            result = self.network.max_output()
+            if result == 0:
+                self.accelerate()
+            elif result == 1:
+                self.brake()
+            elif result == 2:
+                self.turn(-1)
+            elif result == 3:
+                self.turn(1)
+
         x_incr = math.cos(math.radians(self.angle))
         y_incr = math.sin(math.radians(self.angle))
         x = self.pos[0] + (x_incr * self.speed)
         y = self.pos[1] + (y_incr * self.speed)
+        self.distance += x_incr * self.speed + y_incr * self.speed
         self.pos = (x, y)
         self.rect.x = int(x)
         self.rect.y = int(y)
@@ -205,6 +223,8 @@ class Car:
 
         for sight in self.los:
             sight.draw(screen, pygame.color.THECOLORS["lightgray"])
+
+        self.network.draw(screen, (600, 100))
  
     def collision(self):
         for section in self.track.sections:
@@ -214,6 +234,9 @@ class Car:
                         self.collide()
 
     def collide(self):
+        self.network.fitness = self.distance
+        self.network.complete = True
+        self.distance = 0
         self.speed = 0
         self.pos = self.track.start_point
         
@@ -231,10 +254,11 @@ def main():
 
     track = Track("track.txt", pygame.color.THECOLORS["black"])
 
-    cars = []
-    #cars.append(Car((10, 10), (100, 100), 0, 1, 1, 1))
+    population_size = 20
+    Car((10, 10), pygame.color.THECOLORS["blue"], .5, 1, 10, 10, track)
 
-    user_car = Car((10, 10), pygame.color.THECOLORS["blue"], .5, 1, 10, 10, track)
+
+    #user_car = Car((10, 10), pygame.color.THECOLORS["blue"], .5, 1, 10, 10, track)
     user_acc = False
     user_brake = False
     user_turn_right = False
@@ -270,7 +294,7 @@ def main():
         for car in cars:
             car.draw(screen)
             car.move()
-        
+        ''' 
         if user_acc:
             user_car.accelerate()
         if user_brake:
@@ -279,13 +303,18 @@ def main():
             user_car.turn(1)
         if user_turn_left:
             user_car.turn(-1)
-
+        '''
         framerate = clock.get_fps()
         framerate_label = font.render("FPS: ".join([str(framerate)]), 1, pygame.color.THECOLORS["black"])
         screen.blit(framerate_label, (0,0))
+
+        '''distance = user_car.distance
+        distance_label = font.render("Distance".join([str(distance)]), 1, pygame.color.THECOLORS["black"])
+        screen.blit(distance_label, (500, 0))
+        '''
         
-        user_car.draw(screen)
-        user_car.move()
+        #user_car.draw(screen)
+        #user_car.move()
        
         track.draw(screen) 
        
